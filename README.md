@@ -49,7 +49,7 @@ Kurze Einleitung (optional).
 
 ## Mädchen
 
-### Fragen von Jungs an Mädchen
+### Fragen von Jungen an Mädchen
 
 1. Erste Frage?
 2. Zweite Frage?
@@ -58,9 +58,9 @@ Kurze Einleitung (optional).
 
 1. …
 
-## Jungs
+## Jungen
 
-### Fragen von Mädchen an Jungs
+### Fragen von Mädchen an Jungen
 
 1. …
 ```

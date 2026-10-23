@@ -8,7 +8,7 @@ export interface Section {
 	questions: Question[];
 }
 
-/** Zielgruppe, zwischen der auf der Seite umgeschaltet wird (z. B. „Mädels“, „Jungs“). */
+/** Zielgruppe, zwischen der auf der Seite umgeschaltet wird (z. B. „Mädchen“, „Jungen“). */
 export interface Audience {
 	/** URL-Pfad der Zielgruppe, z. B. `maedels` */
 	id: string;
