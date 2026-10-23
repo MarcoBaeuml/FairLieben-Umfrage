@@ -1,0 +1,524 @@
+<!doctype html>
+<!--
+	Lokale Auswertung der verschlüsselten Umfrage-Exporte.
+	Diese Datei nur lokal im Browser öffnen (Doppelklick). Sie lädt nichts aus dem Internet
+	und sendet nichts weg: Private Key und Antworten verlassen den Rechner nicht.
+-->
+<html lang="de">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta
+			http-equiv="Content-Security-Policy"
+			content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'"
+		/>
+		<title>Umfrage-Auswertung</title>
+		<style>
+			:root {
+				--text: #1e293b;
+				--muted: #64748b;
+				--border: #cbd5e1;
+				--bg: #fff;
+				--panel: #f8fafc;
+				--accent: #1e293b;
+				--error: #b91c1c;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+				font:
+					16px/1.5 system-ui,
+					-apple-system,
+					'Segoe UI',
+					sans-serif;
+				color: var(--text);
+				background: var(--bg);
+			}
+			main {
+				max-width: 52rem;
+				margin: 0 auto;
+				padding: 2rem 1rem 4rem;
+			}
+			h1 {
+				margin-top: 0;
+			}
+			section.panel {
+				background: var(--panel);
+				border: 1px solid var(--border);
+				border-radius: 6px;
+				padding: 1rem 1.25rem;
+				margin-bottom: 1.25rem;
+			}
+			section.panel h2 {
+				margin: 0 0 0.75rem;
+				font-size: 1.1rem;
+			}
+			label {
+				display: block;
+				font-weight: 600;
+				margin: 0.75rem 0 0.25rem;
+			}
+			textarea {
+				width: 100%;
+				min-height: 7rem;
+				font:
+					12px/1.4 ui-monospace,
+					monospace;
+				padding: 0.5rem;
+				border: 1px solid var(--border);
+				border-radius: 4px;
+			}
+			button {
+				font: inherit;
+				padding: 0.5rem 1rem;
+				border-radius: 4px;
+				border: 1px solid var(--accent);
+				background: var(--accent);
+				color: #fff;
+				cursor: pointer;
+				margin: 0.75rem 0.5rem 0 0;
+			}
+			button.secondary {
+				background: #fff;
+				color: var(--accent);
+			}
+			.hint {
+				color: var(--muted);
+				font-size: 0.9rem;
+			}
+			.error {
+				color: var(--error);
+				font-weight: 600;
+			}
+			.toolbar {
+				display: flex;
+				flex-wrap: wrap;
+				align-items: center;
+				gap: 0.5rem;
+				margin-bottom: 1.5rem;
+			}
+			.toolbar button {
+				margin: 0;
+			}
+			.section > h2 {
+				font-size: 1.5rem;
+				margin: 2.5rem 0 0;
+				padding-bottom: 0.5rem;
+				border-bottom: 2px solid var(--text);
+			}
+			.question {
+				margin-top: 2rem;
+			}
+			.question h3 {
+				font-size: 1.15rem;
+				margin: 0 0 0.25rem;
+				break-after: avoid;
+			}
+			.question .count {
+				color: var(--muted);
+				margin: 0 0 0.75rem;
+			}
+			.answer {
+				white-space: pre-wrap;
+				overflow-wrap: anywhere;
+				border-left: 3px solid var(--border);
+				padding: 0.25rem 0 0.25rem 0.75rem;
+				margin: 0 0 0.75rem;
+				break-inside: avoid;
+			}
+			@media print {
+				.no-print {
+					display: none !important;
+				}
+				main {
+					max-width: none;
+					padding: 0;
+				}
+				.section {
+					break-before: page;
+				}
+				.section:first-of-type {
+					break-before: auto;
+				}
+				.section > h2 {
+					margin-top: 0;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<div class="no-print">
+				<h1>Umfrage-Auswertung</h1>
+
+				<section class="panel">
+					<h2>1. Private Key</h2>
+					<input type="file" id="keyFile" accept=".pem,.key,.txt" />
+					<label for="keyText">oder hier einfügen (PEM, „-----BEGIN PRIVATE KEY-----“)</label>
+					<textarea id="keyText" spellcheck="false" autocomplete="off"></textarea>
+					<button id="derivePublicKey" class="secondary">Zugehörigen Public Key anzeigen</button>
+				</section>
+
+				<section class="panel">
+					<h2>2. Export aus <code>/admin</code></h2>
+					<input type="file" id="exportFile" accept=".json,application/json" />
+				</section>
+
+				<button id="decrypt">Entschlüsseln</button>
+				<p id="status" role="status"></p>
+
+				<details class="panel">
+					<summary><strong>Neues Schlüsselpaar erzeugen</strong></summary>
+					<p class="hint">
+						Erzeugt ein RSA-4096-Schlüsselpaar lokal im Browser. Der Private Key wird als
+						<code>private-key.pem</code> heruntergeladen, der Public Key erscheint darunter in einer
+						Zeile zum Kopieren. Den Private Key sicher aufbewahren: Geht er verloren, sind alle
+						Antworten unwiederbringlich verloren.
+					</p>
+					<button id="generate" class="secondary">Schlüsselpaar erzeugen</button>
+				</details>
+
+				<section class="panel" id="publicKeyBox" hidden>
+					<h2>Public Key (einzeilig)</h2>
+					<p class="hint">
+						Diesen Wert als <code>PUBLIC_KEY</code> setzen: bei Cloudflare mit
+						<code>yarn wrangler secret put PUBLIC_KEY</code> und einfügen, lokal in
+						<code>.dev.vars</code> hinter <code>PUBLIC_KEY=</code>. Der Public Key ist nicht geheim.
+					</p>
+					<textarea id="publicKeyOut" readonly spellcheck="false"></textarea>
+					<button id="copyPublicKey" class="secondary">Kopieren</button>
+					<span id="copyStatus" class="hint"></span>
+				</section>
+			</div>
+
+			<div id="results" hidden>
+				<h1 id="surveyTitle"></h1>
+				<div class="toolbar no-print">
+					<span id="summary"></span>
+					<button id="shuffle" class="secondary">Neu mischen</button>
+					<button id="csv" class="secondary">CSV herunterladen</button>
+					<button id="print">Als PDF drucken</button>
+				</div>
+				<div id="questions"></div>
+			</div>
+		</main>
+
+		<script>
+			'use strict';
+
+			const $ = (id) => document.getElementById(id);
+			let groups = []; // siehe groupBySection
+			let surveyTitle = '';
+
+			function setStatus(text, isError = false) {
+				$('status').textContent = text;
+				$('status').className = isError ? 'error' : '';
+			}
+
+			function base64ToBytes(base64) {
+				return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+			}
+
+			function bytesToBase64(bytes) {
+				let binary = '';
+				for (const byte of new Uint8Array(bytes)) binary += String.fromCharCode(byte);
+				return btoa(binary);
+			}
+
+			function bytesToPem(bytes, label) {
+				const lines = bytesToBase64(bytes)
+					.match(/.{1,64}/g)
+					.join('\n');
+				return `-----BEGIN ${label}-----\n${lines}\n-----END ${label}-----\n`;
+			}
+
+			function download(filename, content, type) {
+				const url = URL.createObjectURL(new Blob([content], { type }));
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = filename;
+				a.click();
+				setTimeout(() => URL.revokeObjectURL(url), 1000);
+			}
+
+			function shuffle(array) {
+				for (let i = array.length - 1; i > 0; i--) {
+					const j = crypto.getRandomValues(new Uint32Array(1))[0] % (i + 1);
+					[array[i], array[j]] = [array[j], array[i]];
+				}
+				return array;
+			}
+
+			async function importPrivateKey(pem, extractable = false) {
+				if (pem.includes('ENCRYPTED PRIVATE KEY')) {
+					throw new Error(
+						'Der Private Key ist passwortgeschützt. Bitte unverschlüsselt (PKCS#8) verwenden.'
+					);
+				}
+				if (pem.includes('BEGIN RSA PRIVATE KEY')) {
+					throw new Error(
+						'Der Private Key ist im PKCS#1-Format. Umwandeln mit: openssl pkcs8 -topk8 -nocrypt -in alt.pem -out private-key.pem'
+					);
+				}
+				if (!pem.includes('BEGIN PRIVATE KEY')) {
+					throw new Error('Kein Private Key gefunden (erwartet „-----BEGIN PRIVATE KEY-----“).');
+				}
+				const der = base64ToBytes(pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''));
+				return crypto.subtle.importKey(
+					'pkcs8',
+					der,
+					{ name: 'RSA-OAEP', hash: 'SHA-256' },
+					extractable,
+					['decrypt']
+				);
+			}
+
+			/** Public Key als eine Zeile Base64 (SPKI), so wie ihn PUBLIC_KEY erwartet. */
+			async function publicKeyLine(publicKey) {
+				return bytesToBase64(await crypto.subtle.exportKey('spki', publicKey));
+			}
+
+			/** Der Public Key steckt im Private Key (Modulus n, Exponent e) und lässt sich daraus ableiten. */
+			async function publicKeyFromPrivate(privateKey) {
+				const { n, e } = await crypto.subtle.exportKey('jwk', privateKey);
+				return crypto.subtle.importKey(
+					'jwk',
+					{ kty: 'RSA', n, e, alg: 'RSA-OAEP-256', ext: true },
+					{ name: 'RSA-OAEP', hash: 'SHA-256' },
+					true,
+					['encrypt']
+				);
+			}
+
+			function showPublicKey(line) {
+				$('publicKeyOut').value = line;
+				$('copyStatus').textContent = '';
+				$('publicKeyBox').hidden = false;
+				$('publicKeyBox').scrollIntoView({ behavior: 'smooth', block: 'center' });
+			}
+
+			async function decryptPayload(privateKey, payload) {
+				if (payload.v !== 1) throw new Error(`Unbekannte Version ${payload.v}`);
+				const rawKey = await crypto.subtle.decrypt(
+					{ name: 'RSA-OAEP' },
+					privateKey,
+					base64ToBytes(payload.key)
+				);
+				const aesKey = await crypto.subtle.importKey('raw', rawKey, 'AES-GCM', false, ['decrypt']);
+				const plaintext = await crypto.subtle.decrypt(
+					{ name: 'AES-GCM', iv: base64ToBytes(payload.iv) },
+					aesKey,
+					base64ToBytes(payload.data)
+				);
+				return JSON.parse(new TextDecoder().decode(plaintext));
+			}
+
+			/**
+			 * Gruppiert alle Antworten nach Abschnitt und Frage; leere Antworten werden ausgelassen.
+			 * Ergebnis: [{ title, audience, position, questions: [{ question, position, answers }] }]
+			 */
+			function groupBySection(responses) {
+				const sections = new Map();
+				for (const response of responses) {
+					response.answers.forEach((entry, position) => {
+						const title = entry.section || '';
+						if (!sections.has(title)) {
+							sections.set(title, {
+								title,
+								audience: response.audience || '',
+								position,
+								questions: new Map()
+							});
+						}
+						const section = sections.get(title);
+						if (!section.questions.has(entry.question)) {
+							section.questions.set(entry.question, {
+								question: entry.question,
+								position,
+								answers: []
+							});
+						}
+						if (entry.answer.trim())
+							section.questions.get(entry.question).answers.push(entry.answer);
+					});
+				}
+				const byPosition = (a, b) => a.position - b.position;
+				return [...sections.values()]
+					.map((section) => ({
+						...section,
+						questions: [...section.questions.values()].sort(byPosition)
+					}))
+					.sort((a, b) => a.audience.localeCompare(b.audience, 'de') || byPosition(a, b));
+			}
+
+			function shuffleAll() {
+				for (const section of groups) {
+					for (const group of section.questions) shuffle(group.answers);
+				}
+			}
+
+			function render() {
+				$('surveyTitle').textContent = surveyTitle;
+				const container = $('questions');
+				container.replaceChildren();
+				for (const section of groups) {
+					const sectionElement = document.createElement('section');
+					sectionElement.className = 'section';
+					if (section.title) {
+						const title = document.createElement('h2');
+						title.textContent = section.title;
+						sectionElement.append(title);
+					}
+
+					for (const group of section.questions) {
+						const questionElement = document.createElement('div');
+						questionElement.className = 'question';
+
+						const heading = document.createElement('h3');
+						heading.textContent = group.question;
+						const count = document.createElement('p');
+						count.className = 'count';
+						count.textContent = `${group.answers.length} ${group.answers.length === 1 ? 'Antwort' : 'Antworten'}`;
+						questionElement.append(heading, count);
+
+						for (const answer of group.answers) {
+							const p = document.createElement('p');
+							p.className = 'answer';
+							p.textContent = answer;
+							questionElement.append(p);
+						}
+						sectionElement.append(questionElement);
+					}
+					container.append(sectionElement);
+				}
+				$('results').hidden = false;
+			}
+
+			function toCsv() {
+				const escape = (value) => `"${String(value).replace(/"/g, '""')}"`;
+				const rows = [['Abschnitt', 'Frage', 'Antwort']];
+				for (const section of groups) {
+					for (const group of section.questions) {
+						for (const answer of group.answers) rows.push([section.title, group.question, answer]);
+					}
+				}
+				// Semikolon und BOM, damit Excel (deutsch) die Datei direkt korrekt öffnet.
+				return '\uFEFF' + rows.map((row) => row.map(escape).join(';')).join('\r\n');
+			}
+
+			$('keyFile').addEventListener('change', async (event) => {
+				const file = event.target.files[0];
+				if (file) $('keyText').value = await file.text();
+			});
+
+			$('decrypt').addEventListener('click', async () => {
+				try {
+					const pem = $('keyText').value.trim();
+					if (!pem) throw new Error('Bitte zuerst den Private Key laden.');
+					const exportFile = $('exportFile').files[0];
+					if (!exportFile) throw new Error('Bitte die Export-Datei auswählen.');
+
+					setStatus('Entschlüssele …');
+					const privateKey = await importPrivateKey(pem);
+
+					let exported;
+					try {
+						exported = JSON.parse(await exportFile.text());
+					} catch {
+						throw new Error('Die Export-Datei ist kein gültiges JSON.');
+					}
+					if (exported.format !== 'umfrage-export' || !Array.isArray(exported.responses)) {
+						throw new Error('Die Datei ist kein Umfrage-Export.');
+					}
+
+					const decrypted = [];
+					let failed = 0;
+					for (const response of exported.responses) {
+						try {
+							decrypted.push(await decryptPayload(privateKey, response.payload));
+						} catch (error) {
+							console.error(response.id, error);
+							failed++;
+						}
+					}
+					if (decrypted.length === 0 && failed > 0) {
+						throw new Error(
+							`Keine der ${failed} Abgaben konnte entschlüsselt werden. Passt der Private Key zum Public Key der Website?`
+						);
+					}
+
+					surveyTitle = exported.survey || decrypted[0]?.survey || 'Umfrage';
+					groups = groupBySection(decrypted);
+					shuffleAll();
+					render();
+
+					$('summary').textContent = `${decrypted.length} Abgaben`;
+					setStatus(
+						failed > 0
+							? `${decrypted.length} Abgaben entschlüsselt, ${failed} fehlgeschlagen (Details in der Browser-Konsole).`
+							: `${decrypted.length} Abgaben entschlüsselt.`,
+						failed > 0
+					);
+				} catch (error) {
+					setStatus(error.message, true);
+				}
+			});
+
+			$('shuffle').addEventListener('click', () => {
+				shuffleAll();
+				render();
+			});
+
+			$('csv').addEventListener('click', () => {
+				download('umfrage-auswertung.csv', toCsv(), 'text/csv;charset=utf-8');
+			});
+
+			$('print').addEventListener('click', () => window.print());
+
+			$('generate').addEventListener('click', async () => {
+				const keyPair = await crypto.subtle.generateKey(
+					{
+						name: 'RSA-OAEP',
+						modulusLength: 4096,
+						publicExponent: new Uint8Array([1, 0, 1]),
+						hash: 'SHA-256'
+					},
+					true,
+					['encrypt', 'decrypt']
+				);
+				const privatePem = bytesToPem(
+					await crypto.subtle.exportKey('pkcs8', keyPair.privateKey),
+					'PRIVATE KEY'
+				);
+				download('private-key.pem', privatePem, 'application/x-pem-file');
+				showPublicKey(await publicKeyLine(keyPair.publicKey));
+			});
+
+			$('derivePublicKey').addEventListener('click', async () => {
+				try {
+					const pem = $('keyText').value.trim();
+					if (!pem) throw new Error('Bitte zuerst den Private Key laden.');
+					const privateKey = await importPrivateKey(pem, true);
+					showPublicKey(await publicKeyLine(await publicKeyFromPrivate(privateKey)));
+					setStatus('');
+				} catch (error) {
+					setStatus(error.message, true);
+				}
+			});
+
+			$('copyPublicKey').addEventListener('click', async () => {
+				const field = $('publicKeyOut');
+				try {
+					await navigator.clipboard.writeText(field.value);
+				} catch {
+					// Fallback, falls die Zwischenablage-API (z. B. bei file://) nicht erlaubt ist
+					field.select();
+					document.execCommand('copy');
+				}
+				$('copyStatus').textContent = 'Kopiert.';
+			});
+		</script>
+	</body>
+</html>

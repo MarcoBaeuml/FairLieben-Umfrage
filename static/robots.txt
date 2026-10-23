@@ -1,3 +1,4 @@
-# allow crawling everything by default
+# Crawlen ist erlaubt, damit Suchmaschinen das „noindex“ der Seiten überhaupt sehen
+# (bei „Disallow“ könnten URLs trotzdem ohne Inhalt im Index landen).
 User-agent: *
 Disallow:

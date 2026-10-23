@@ -24,3 +24,9 @@ vite.config.ts.timestamp-*
 
 .dev.vars*
 !.dev.vars.example
+
+# Private Keys niemals committen
+*private*.pem
+
+# Echte Fragen bleiben lokal, im Repo liegt nur fragen.example.md
+fragen.md

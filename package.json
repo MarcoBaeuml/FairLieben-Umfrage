@@ -1,5 +1,5 @@
 {
-  "name": "umfrage-waldsassen",
+  "name": "fairlieben",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -13,9 +13,12 @@
     "lint": "prettier --check .",
     "format": "prettier --write .",
     "deploy": "npm run build && wrangler deploy",
-    "cf-typegen": "wrangler types ./src/worker-configuration.d.ts"
+    "fragen": "node scripts/fragen-import.ts",
+    "cf-typegen": "rm -rf .svelte-kit/cloudflare && wrangler types ./src/worker-configuration.d.ts"
   },
   "devDependencies": {
+    "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
+    "@lucide/svelte": "^1.61.0",
     "@sveltejs/adapter-auto": "^8.0.0",
     "@sveltejs/adapter-cloudflare": "^8.0.1",
     "@sveltejs/kit": "^3.0.0",

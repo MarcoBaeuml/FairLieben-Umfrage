@@ -1,0 +1,4 @@
+SURVEY_PASSWORD=bitte-aendern
+ADMIN_PASSWORD=bitte-auch-aendern
+# Public Key einzeilig (Base64), z. B. aus auswertung.html → „Schlüsselpaar erzeugen“
+PUBLIC_KEY=
